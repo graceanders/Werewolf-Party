@@ -33,6 +33,11 @@ export interface PlayerPrivate {
   notice: string | null;
   lover_id: string | null;
   cupid_done: boolean;
+  witch_save_used: boolean;
+  witch_poison_used: boolean;
+  witch_round: number;
+  witch_action: 'save' | 'poison' | 'pass' | null;
+  witch_target: string | null;
 }
 
 export interface Role {

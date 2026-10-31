@@ -222,7 +222,8 @@ function Roster({ s }: { s: GameState }) {
 
 /** Who to wake, in order, during the night. */
 function NightScript({ s }: { s: GameState }) {
-  const { players, privates, roles } = s;
+  const { game, players, privates, roles } = s;
+  if (!game) return null;
   const steps = Object.values(roles)
     .filter((r) => r.night_order !== null)
     .sort((a, b) => (a.night_order ?? 0) - (b.night_order ?? 0))
@@ -240,6 +241,16 @@ function NightScript({ s }: { s: GameState }) {
           <li key={role.id}>
             <strong>{role.name}</strong>: {holders.map((p) => (p.alive ? p.name : `${p.name} ✝`)).join(', ')}
             <div class="muted">{role.description}</div>
+            {role.id === 'witch' && holders.map((p) => {
+              const pr = privates.find((x) => x.player_id === p.id);
+              if (!pr || !p.alive) return null;
+              const what = pr.witch_round !== game.round ? 'has not answered yet'
+                : pr.witch_action === 'save' ? 'uses the SAVE potion: spare tonight\'s victim'
+                : pr.witch_action === 'poison' ? `POISONS ${players.find((x) => x.id === pr.witch_target)?.name ?? '?'}: kill them`
+                : 'uses nothing';
+              const left = [pr.witch_save_used ? '' : 'save', pr.witch_poison_used ? '' : 'poison'].filter(Boolean).join(' + ') || 'none';
+              return <div key={p.id} class="warn">{p.name} {what} (potions left: {left})</div>;
+            })}
           </li>
         ))}
       </ol>

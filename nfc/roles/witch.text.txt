@@ -1,1 +1,1 @@
-Witch: You have one potion that saves the wolves' victim and one that kills any player. Each can be used once per game.
+Witch: You have two potions, each usable once per game: one saves the wolves' victim, one poisons any player. You can use only one potion per night. Each night you will be asked whether to use one.

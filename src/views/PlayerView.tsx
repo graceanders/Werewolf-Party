@@ -49,6 +49,7 @@ export function PlayerView({ gameId }: { gameId: string }) {
       <Notice s={s} />
       <Lover s={s} />
       <CupidPicker s={s} />
+      <WitchPanel s={s} />
       {game.status === 'lobby' && me && <Waiting s={s} />}
       <RoleCard role={role} alias={myPrivate?.alias ?? ''} packmates={s.pack}
         waitingText={game.mode === 'role_tokens' ? 'Tap a role card to find out who you are.' : undefined} />
@@ -123,6 +124,50 @@ function CupidPicker({ s }: { s: ReturnType<typeof useGame> }) {
         onClick={() => run(async () => { await rpc('cupid_link', { p_game: game.id, p_a: picked[0], p_b: picked[1] }); s.refresh(); })}>
         Make them fall in love
       </button>
+      <ErrorNote message={error} />
+    </section>
+  );
+}
+
+/** Each night the Witch decides whether to use a potion (one per night, each potion once per game). */
+function WitchPanel({ s }: { s: ReturnType<typeof useGame> }) {
+  const { game, me, myPrivate, players } = s;
+  const { busy, error, run } = useAction();
+  const [choice, setChoice] = useState('');
+  const [target, setTarget] = useState('');
+  if (!game || !me || myPrivate?.role !== 'witch' || !me.alive || game.status !== 'night') return null;
+  const { witch_save_used: saveUsed, witch_poison_used: poisonUsed } = myPrivate;
+
+  if (saveUsed && poisonUsed) {
+    return <section class="card"><h2>Witch</h2><p>Both of your potions are used. You have nothing left to brew, but your vote still counts.</p></section>;
+  }
+  if (myPrivate.witch_round === game.round) {
+    const done = myPrivate.witch_action === 'save' ? 'You used your save potion tonight.'
+      : myPrivate.witch_action === 'poison' ? `You poisoned ${players.find((p) => p.id === myPrivate.witch_target)?.name ?? 'a player'} tonight.`
+      : 'You used no potion tonight.';
+    return <section class="card"><h2>Witch</h2><p>{done} The Game Master will carry it out.</p></section>;
+  }
+
+  const go = (action: string, t: string | null) =>
+    run(async () => { await rpc('witch_act', { p_game: game.id, p_action: action, p_target: t }); setChoice(''); setTarget(''); s.refresh(); });
+  const ready = choice === 'pass' || choice === 'save' || (choice === 'poison' && !!target);
+  return (
+    <section class="card">
+      <h2>Witch: use a potion tonight?</h2>
+      <p class="muted">One potion per night, each potion once per game.{saveUsed ? ' Your save potion is used.' : ''}{poisonUsed ? ' Your poison potion is used.' : ''}</p>
+      <select value={choice} disabled={busy} onChange={(e) => setChoice((e.target as HTMLSelectElement).value)}>
+        <option value="">Choose…</option>
+        {!saveUsed && <option value="save">Save tonight's victim</option>}
+        {!poisonUsed && <option value="poison">Poison a player</option>}
+        <option value="pass">Use nothing tonight</option>
+      </select>
+      {choice === 'poison' && (
+        <select value={target} disabled={busy} onChange={(e) => setTarget((e.target as HTMLSelectElement).value)}>
+          <option value="">Who?</option>
+          {players.filter((p) => p.alive && p.id !== me.id).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+        </select>
+      )}
+      <button disabled={busy || !ready} onClick={() => go(choice, choice === 'poison' ? target : null)}>Confirm</button>
       <ErrorNote message={error} />
     </section>
   );
