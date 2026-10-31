@@ -8,6 +8,7 @@ import { Countdown, ErrorNote, Page, useAction } from '../ui';
 export function GmView({ gameId }: { gameId: string }) {
   const s = useGame(gameId);
   const { game } = s;
+  const [notes, setNotes] = useState<string[]>([]);
   if (s.loading) return <Page title="Loading…"><span /></Page>;
   if (s.error || !game) {
     return <Page title="Can't open this game"><ErrorNote message={s.error} /><a class="button" href="#/">Home</a></Page>;
@@ -31,7 +32,15 @@ export function GmView({ gameId }: { gameId: string }) {
         {(game.status === 'night' || game.status === 'day') && <Countdown endsAt={game.phase_ends_at} />}
       </header>
 
-      {game.status === 'lobby' && <Lobby s={s} />}
+      {game.status !== 'ended' && <LateJoin s={s} />}
+      {notes.length > 0 && (
+        <section class="card">
+          <h2>Heads up from the deal</h2>
+          <ul>{notes.map((n) => <li key={n}>{n}</li>)}</ul>
+          <button class="ghost" onClick={() => setNotes([])}>Dismiss</button>
+        </section>
+      )}
+      {game.status === 'lobby' && <Lobby s={s} onStarted={setNotes} />}
       {(game.status === 'night' || game.status === 'day') && <Controls s={s} />}
       {game.status === 'ended' && <p class="notice ok">Game over. Roles are now visible to everyone.</p>}
 
@@ -42,8 +51,27 @@ export function GmView({ gameId }: { gameId: string }) {
   );
 }
 
-function Lobby({ s }: { s: GameState }) {
-  const { game, players, roles } = s;
+function LateJoin({ s }: { s: GameState }) {
+  const { game } = s;
+  const { busy, error, run } = useAction();
+  if (!game) return null;
+  return (
+    <section class="card">
+      <label class="check">
+        <input type="checkbox" checked={game.allow_late_join} disabled={busy}
+          onChange={(e) => {
+            const open = (e.target as HTMLInputElement).checked;
+            run(async () => { await rpc('set_late_join', { p_game: game.id, p_open: open }); s.refresh(); });
+          }} />
+        <span>Let new players join after the game starts (they become villagers)</span>
+      </label>
+      <ErrorNote message={error} />
+    </section>
+  );
+}
+
+function Lobby({ s, onStarted }: { s: GameState; onStarted: (notes: string[]) => void }) {
+  const { game, players, roles, privates } = s;
   const [deck, setDeck] = useState<Record<string, number>>({});
   const [day, setDay] = useState(Math.round((game?.day_seconds ?? 2700) / 60));
   const [night, setNight] = useState(Math.round((game?.night_seconds ?? 600) / 60));
@@ -57,18 +85,34 @@ function Lobby({ s }: { s: GameState }) {
   }, [game?.variant, n]);
 
   if (!game) return null;
-  const waiting = players.filter((p) => !p.token_code).length;
   const joinLink = appUrl('/');
+  const fmt = (m: Record<string, number>) => Object.entries(m).map(([id, c]) => `${c}× ${roles[id]?.name ?? id}`).join(', ');
+  const picked: Record<string, number> = {};
+  for (const pr of privates) if (pr.role) picked[pr.role] = (picked[pr.role] ?? 0) + 1;
+  const pickedCount = Object.values(picked).reduce((a, b) => a + b, 0);
 
   return (
     <section class="card">
       <h2>Lobby</h2>
-      <p>Players join at <code>{joinLink}</code> with code <strong class="big">{game.code}</strong>, or by tapping a token.</p>
-      <p class="muted">{n} joined{game.require_tokens ? `, ${waiting} still need to tap a token` : ''}.</p>
+      <p>
+        Players join at <code>{joinLink}</code> with code <strong class="big">{game.code}</strong>
+        {game.mode === 'role_tokens' ? ', or just by tapping a role card.' : '.'}
+      </p>
+      <p class="muted">
+        {n} joined{game.mode === 'role_tokens' ? `, ${pickedCount} have picked a role card` : ''}.
+      </p>
       {Object.keys(deck).length > 0 ? (
-        <p>Deal for {n}: {Object.entries(deck).map(([id, c]) => `${c}× ${roles[id]?.name ?? id}`).join(', ')}</p>
+        <p>
+          {game.mode === 'role_tokens' ? 'Recommended cards' : 'Deal'} for {n}: {fmt(deck)}
+        </p>
       ) : <p class="muted">Need at least 3 players to deal.</p>}
-      <p class="muted">Roles are dealt only among the people here, so a werewolf can never be left on an unclaimed token. Anyone who joins later becomes a villager.</p>
+      {game.mode === 'role_tokens' && pickedCount > 0 && <p class="muted">Picked so far: {fmt(picked)}</p>}
+      <p class="muted">
+        {game.mode === 'role_tokens'
+          ? 'When you start, anyone without a card is dealt a role that is missing. If a role was never picked up (say a werewolf), a random villager is promoted into it. Nobody loses a role they picked, and only villagers are promoted.'
+          : 'Roles are dealt randomly among the people here when you start.'}
+        {' '}Anyone who joins later becomes a villager.
+      </p>
       <div class="row">
         <label>Day (min)<input type="number" min={1} value={day} onInput={(e) => setDay(Number((e.target as HTMLInputElement).value))} /></label>
         <label>Night (min)<input type="number" min={1} value={night} onInput={(e) => setNight(Number((e.target as HTMLInputElement).value))} /></label>
@@ -79,7 +123,11 @@ function Lobby({ s }: { s: GameState }) {
       </div>
       <ErrorNote message={timers.error} />
       <button disabled={start.busy || n < 3}
-        onClick={() => start.run(async () => { await rpc('start_game', { p_game: game.id }); s.refresh(); })}>
+        onClick={() => start.run(async () => {
+          const r = await rpc<{ notes: string[] }>('start_game', { p_game: game.id });
+          onStarted(r?.notes ?? []);
+          s.refresh();
+        })}>
         Deal roles and begin night 1
       </button>
       <ErrorNote message={start.error} />
@@ -108,7 +156,7 @@ function Controls({ s }: { s: GameState }) {
       ) : (
         <div class="row wrap">
           <span>Winner:</span>
-          {(['village', 'wolf', 'solo', 'none'] as const).map((w) => (
+          {(['village', 'wolf', 'lovers', 'solo', 'none'] as const).map((w) => (
             <button key={w} class="small" disabled={busy} onClick={() => act('end_game', { p_game: game.id, p_winner: w })}>{w}</button>
           ))}
           <button class="small ghost" onClick={() => setEnding(false)}>Cancel</button>
@@ -140,12 +188,12 @@ function Roster({ s }: { s: GameState }) {
               <div class="who">
                 <strong>{p.alive ? '' : '✝ '}{p.name}</strong>
                 <span class="muted"> “{pr?.alias}”</span>
-                {p.token_code ? <span class="ok"> · token {p.token_code}</span> : <span class="muted"> · no token</span>}
+                {pr?.lover_id && <span class="muted"> · 💘 {players.find((x) => x.id === pr.lover_id)?.name}</span>}
                 {!p.user_id && <span class="warn"> · device unlinked</span>}
                 {(tally.get(p.id) ?? 0) > 0 && <span class="count">{tally.get(p.id)} votes</span>}
               </div>
               <div class="row wrap">
-                {dealt && (
+                {(dealt || pr?.role) && (
                   <select value={pr?.role ?? ''} disabled={busy}
                     onChange={(e) => act('reassign_role', { p_player: p.id, p_role: (e.target as HTMLSelectElement).value })}>
                     {Object.values(roles).map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}

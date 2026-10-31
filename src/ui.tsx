@@ -10,6 +10,18 @@ export const store = {
   },
 };
 
+/** After tapping a role tag, show the role straight away on the next screen (once). */
+export function flagReveal() {
+  try { sessionStorage.setItem('reveal', '1'); } catch { /* private mode */ }
+}
+export function consumeReveal(): boolean {
+  try {
+    const on = sessionStorage.getItem('reveal') === '1';
+    sessionStorage.removeItem('reveal');
+    return on;
+  } catch { return false; }
+}
+
 export function fmtClock(ms: number): string {
   const s = Math.max(0, Math.round(ms / 1000));
   const h = Math.floor(s / 3600);

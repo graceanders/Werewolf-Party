@@ -1,17 +1,23 @@
 import { useState } from 'preact/hooks';
 import type { Role } from '../types';
+import { consumeReveal } from '../ui';
 
 const ICONS: Record<string, string> = {
   villager: '🧑‍🌾', werewolf: '🐺', seer: '🔮', doctor: '🩺', hunter: '🏹', witch: '🧪', cupid: '💘',
 };
 
 /** Hidden by default so a glance over the shoulder doesn't spoil the game. */
-export function RoleCard({ role, alias, packmates }: {
-  role: Role | null; alias: string; packmates: { name: string; alive: boolean }[];
+export function RoleCard({ role, alias, packmates, waitingText }: {
+  role: Role | null; alias: string; packmates: { name: string; alive: boolean }[]; waitingText?: string;
 }) {
-  const [shown, setShown] = useState(false);
+  const [shown, setShown] = useState(consumeReveal);
   if (!role) {
-    return <section class="card"><h2>Your role</h2><p class="muted">Roles are dealt when the Game Master starts the game.</p></section>;
+    return (
+      <section class="card">
+        <h2>Your role</h2>
+        <p class="muted">{waitingText ?? 'Roles are dealt when the Game Master starts the game.'}</p>
+      </section>
+    );
   }
   return (
     <section class={`card role ${shown ? role.team : ''}`}>

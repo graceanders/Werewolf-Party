@@ -1,5 +1,7 @@
 export type Status = 'lobby' | 'night' | 'day' | 'ended';
 export type Channel = 'town' | 'wolves' | 'dead';
+/** none: random deal in the app. role_tokens: physical cards, each NFC tag / QR holds a role. */
+export type GameMode = 'none' | 'role_tokens';
 
 export interface Game {
   id: string;
@@ -11,7 +13,8 @@ export interface Game {
   day_seconds: number;
   night_seconds: number;
   phase_ends_at: string | null;
-  require_tokens: boolean;
+  mode: GameMode;
+  allow_late_join: boolean;
   winner: 'village' | 'wolf' | 'solo' | 'none' | null;
 }
 
@@ -21,13 +24,15 @@ export interface Player {
   user_id: string | null;
   name: string;
   alive: boolean;
-  token_code: string | null;
 }
 
 export interface PlayerPrivate {
   player_id: string;
   alias: string;
   role: string | null;
+  notice: string | null;
+  lover_id: string | null;
+  cupid_done: boolean;
 }
 
 export interface Role {

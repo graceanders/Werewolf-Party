@@ -46,8 +46,12 @@ export function PlayerView({ gameId }: { gameId: string }) {
       {game.status === 'ended' && <EndCard s={s} />}
       {me && !me.alive && game.status !== 'ended' && <p class="notice dead">You have died. You can still watch and chat in the Graveyard.</p>}
 
-      {game.status === 'lobby' && me && <CheckIn s={s} />}
-      <RoleCard role={role} alias={myPrivate?.alias ?? ''} packmates={s.pack} />
+      <Notice s={s} />
+      <Lover s={s} />
+      <CupidPicker s={s} />
+      {game.status === 'lobby' && me && <Waiting s={s} />}
+      <RoleCard role={role} alias={myPrivate?.alias ?? ''} packmates={s.pack}
+        waitingText={game.mode === 'role_tokens' ? 'Tap a role card to find out who you are.' : undefined} />
       <Players s={s} />
       <Chat gameId={game.id} messages={s.messages} channels={channels} canWrite={canWrite} />
       <NotifyButton />
@@ -55,30 +59,70 @@ export function PlayerView({ gameId }: { gameId: string }) {
   );
 }
 
-function CheckIn({ s }: { s: ReturnType<typeof useGame> }) {
-  const { game, me } = s;
-  const [token, setToken] = useState('');
-  const { busy, error, run } = useAction();
+function Waiting({ s }: { s: ReturnType<typeof useGame> }) {
+  const { game, me, myPrivate } = s;
   if (!game || !me) return null;
-  if (me.token_code) {
-    return <p class="notice ok">✓ Checked in with token <code>{me.token_code}</code>. Waiting for the Game Master to start.</p>;
+  if (game.mode === 'role_tokens' && !myPrivate?.role) {
+    return (
+      <section class="card">
+        <h2>Pick your role</h2>
+        <p>Take one role card from the bowl and tap it with your phone (or scan its QR code). Only tap one: the first tap is final.</p>
+        <p class="muted">No card? The Game Master will deal you a role when the game starts.</p>
+      </section>
+    );
   }
+  return <p class="notice ok">✓ You're in. Waiting for the Game Master to start.</p>;
+}
+
+/** Private message from the Game Master, e.g. after a role change. */
+function Notice({ s }: { s: ReturnType<typeof useGame> }) {
+  const { game, myPrivate } = s;
+  const { busy, run } = useAction();
+  if (!game || !myPrivate?.notice) return null;
+  return (
+    <section class="card notice-card">
+      <p>{myPrivate.notice}</p>
+      <button class="ghost" disabled={busy}
+        onClick={() => run(async () => { await rpc('clear_notice', { p_game: game.id }); s.refresh(); })}>
+        Got it
+      </button>
+    </section>
+  );
+}
+
+/** Who you are in love with, kept on screen so you know who to protect. */
+function Lover({ s }: { s: ReturnType<typeof useGame> }) {
+  const partner = s.players.find((p) => p.id === s.myPrivate?.lover_id);
+  if (!partner) return null;
+  return <p class="notice">💘 You are in love with <strong>{partner.name}</strong>{partner.alive ? '' : ' ✝'}. If one of you dies, so does the other.</p>;
+}
+
+/** Cupid chooses the two lovers on the first night. */
+function CupidPicker({ s }: { s: ReturnType<typeof useGame> }) {
+  const { game, me, myPrivate, players } = s;
+  const { busy, error, run } = useAction();
+  const [picked, setPicked] = useState<string[]>([]);
+  if (!game || !me || myPrivate?.role !== 'cupid' || myPrivate.cupid_done || !me.alive) return null;
+  if (game.status !== 'night' || game.round !== 1) return null;
+  const toggle = (id: string) => setPicked((c) => (c.includes(id) ? c.filter((x) => x !== id) : c.length < 2 ? [...c, id] : c));
   return (
     <section class="card">
-      <h2>Check in</h2>
-      <p>{game.require_tokens
-        ? 'Pick up a token and tap it with your phone to check in.'
-        : 'You are in. The Game Master will start soon.'}</p>
-      {game.require_tokens && (
-        <form class="row" onSubmit={(e) => {
-          e.preventDefault();
-          run(async () => { await rpc('tap_token', { p_code: game.code, p_token: token, p_name: null }); s.refresh(); });
-        }}>
-          <input placeholder="or type the token code" value={token}
-            onInput={(e) => setToken((e.target as HTMLInputElement).value)} />
-          <button disabled={busy || !token.trim()}>Claim</button>
-        </form>
-      )}
+      <h2>Cupid: choose two lovers</h2>
+      <p class="muted">Pick any two players, yourself included. They will be told who the other is.</p>
+      <ul class="players">
+        {players.filter((p) => p.alive).map((p) => (
+          <li key={p.id}>
+            <span>{p.name}{p.id === me.id ? ' (you)' : ''}</span>
+            <button class={picked.includes(p.id) ? 'small on' : 'small'} disabled={busy} onClick={() => toggle(p.id)}>
+              {picked.includes(p.id) ? 'Chosen' : 'Choose'}
+            </button>
+          </li>
+        ))}
+      </ul>
+      <button disabled={busy || picked.length !== 2}
+        onClick={() => run(async () => { await rpc('cupid_link', { p_game: game.id, p_a: picked[0], p_b: picked[1] }); s.refresh(); })}>
+        Make them fall in love
+      </button>
       <ErrorNote message={error} />
     </section>
   );
@@ -100,7 +144,6 @@ function Players({ s }: { s: ReturnType<typeof useGame> }) {
         {players.map((p) => (
           <li key={p.id} class={p.alive ? '' : 'dead'}>
             <span>{p.alive ? '' : '✝ '}{p.name}{p.id === me?.id ? ' (you)' : ''}</span>
-            {game.status === 'lobby' && game.require_tokens && <span class={p.token_code ? 'ok' : 'muted'}>{p.token_code ? '✓' : '…'}</span>}
             {game.status === 'day' && (tally.get(p.id) ?? 0) > 0 && <span class="count">{tally.get(p.id)} votes</span>}
             {canVote && p.alive && p.id !== me?.id && (
               <button class={mine === p.id ? 'small on' : 'small'} disabled={busy}

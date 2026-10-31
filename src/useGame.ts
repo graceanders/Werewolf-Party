@@ -33,7 +33,7 @@ export function useGame(gameId: string): GameState {
       const [g, p, pp, r, m, v] = await Promise.all([
         supabase.from('games').select('*').eq('id', gameId).maybeSingle(),
         supabase.from('players').select('*').eq('game_id', gameId).order('joined_at'),
-        supabase.from('player_private').select('player_id, alias, role').eq('game_id', gameId),
+        supabase.from('player_private').select('player_id, alias, role, notice, lover_id, cupid_done').eq('game_id', gameId),
         supabase.from('roles').select('*'),
         supabase.from('messages').select('id, channel, alias, body, is_gm, created_at')
           .eq('game_id', gameId).order('id', { ascending: false }).limit(300),

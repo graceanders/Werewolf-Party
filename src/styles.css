@@ -47,6 +47,10 @@ button.ghost { background: transparent; color: var(--text); border: 1px solid va
 button.danger { color: #ff8a8e; }
 button.small { padding: 5px 10px; font-size: .85rem; }
 button.small.on { background: var(--good); }
+fieldset.modes { border: 1px solid var(--line); border-radius: 10px; display: grid; gap: 10px; margin: 0; padding: 10px 12px; }
+fieldset.modes legend { color: var(--muted); font-size: .9rem; padding: 0 6px; }
+label.mode { align-items: flex-start; color: var(--text); }
+label.mode input { margin-top: 3px; flex: none; }
 .row { display: flex; gap: 8px; align-items: end; }
 .row > label, .row > input { flex: 1; }
 .row.wrap { flex-wrap: wrap; align-items: center; }
@@ -60,6 +64,7 @@ button.small.on { background: var(--good); }
 .notice { margin: 0; padding: 10px 12px; border-radius: 10px; background: #222845; }
 .notice.ok { color: var(--good); }
 .notice.dead { color: #ff8a8e; }
+.notice-card { border-color: var(--accent); }
 .role.wolf { border-color: var(--wolf); }
 .role.village { border-color: var(--good); }
 .role-icon { font-size: 3rem; }
@@ -79,7 +84,10 @@ button.small.on { background: var(--good); }
 .qr-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; }
 .qr { margin: 0; background: #fff; color: #000; border-radius: 10px; padding: 8px; text-align: center; }
 .qr img { width: 100%; height: auto; }
+.qr.role-card h3 { margin: 0 0 4px; font-size: 1.1rem; }
+.qr.role-card figcaption { font-size: .8rem; margin: 4px 0; }
 @media print {
+  .no-print { display: none; }
   body { background: #fff; }
   .page > :not(.qr-grid) { display: none; }
 }

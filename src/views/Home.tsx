@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'preact/hooks';
 import { ensureSession, rpc, supabase } from '../supabase';
 import { go } from '../router';
-import type { Variant } from '../types';
+import type { GameMode, Variant } from '../types';
 import { ErrorNote, Page, store, useAction } from '../ui';
 
 export function Home() {
@@ -30,7 +30,7 @@ export function Home() {
       <JoinCard />
       <HostCard variants={variants} />
       <GmSignIn />
-      <p class="muted center"><a href="#/tokens">Set up physical tokens (NFC / QR)</a></p>
+      <p class="muted center"><a href="#/cards">Print role cards (NFC / QR)</a></p>
     </Page>
   );
 }
@@ -64,12 +64,20 @@ function JoinCard() {
   );
 }
 
+const MODES: { id: GameMode; title: string; text: string }[] = [
+  {
+    id: 'role_tokens', title: 'Physical role cards',
+    text: 'Each card has an NFC tag (or QR) holding a role. Players pick a card, tap it, and see their role and what it does. If a role goes unpicked, a villager is promoted into it when you start.',
+  },
+  { id: 'none', title: 'No cards', text: 'Players join with the game code and the app deals roles randomly.' },
+];
+
 function HostCard({ variants }: { variants: Variant[] }) {
   const [variant, setVariant] = useState('classic');
   const [dayMin, setDayMin] = useState(45);
   const [nightMin, setNightMin] = useState(10);
   const [pin, setPin] = useState('');
-  const [tokens, setTokens] = useState(true);
+  const [mode, setMode] = useState<GameMode>('role_tokens');
   const { busy, error, run } = useAction();
   async function submit(e: Event) {
     e.preventDefault();
@@ -77,7 +85,7 @@ function HostCard({ variants }: { variants: Variant[] }) {
       await ensureSession();
       const r = await rpc<{ game_id: string }>('create_game', {
         p_variant: variant, p_day_seconds: Math.round(dayMin * 60), p_night_seconds: Math.round(nightMin * 60),
-        p_pin: pin, p_require_tokens: tokens,
+        p_pin: pin, p_mode: mode,
       });
       store.set('lastGame', r.game_id); store.set('lastRole', 'gm');
       go(`/gm/${r.game_id}`);
@@ -104,10 +112,15 @@ function HostCard({ variants }: { variants: Variant[] }) {
       <label>GM PIN (4+ characters, lets you recover the GM seat)
         <input value={pin} onInput={(e) => setPin((e.target as HTMLInputElement).value)} />
       </label>
-      <label class="check">
-        <input type="checkbox" checked={tokens} onChange={(e) => setTokens((e.target as HTMLInputElement).checked)} />
-        Players must tap a physical token to check in
-      </label>
+      <fieldset class="modes">
+        <legend>How do players get their roles?</legend>
+        {MODES.map((m) => (
+          <label key={m.id} class="check mode">
+            <input type="radio" name="mode" checked={mode === m.id} onChange={() => setMode(m.id)} />
+            <span><strong>{m.title}</strong><br /><span class="muted">{m.text}</span></span>
+          </label>
+        ))}
+      </fieldset>
       <button disabled={busy || pin.length < 4}>Create game</button>
       <ErrorNote message={error} />
     </form>
